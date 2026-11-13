@@ -21,19 +21,36 @@ export interface KnowledgeItem {
 
 export type QuizDifficulty = 'Nhận biết' | 'Thông hiểu' | 'Vận dụng';
 
+export type QuizQuestionType =
+  | 'multiple-choice'
+  | 'true-false'
+  | 'short-answer';
+
+export interface QuizTrueFalseStatement {
+  text: string;
+  correctAnswer: boolean;
+}
+
 export interface QuizQuestion {
   id: string;
   topic: string;
   difficulty: QuizDifficulty | string;
+  type?: QuizQuestionType;
   question: string;
-  options: string[];
-  correctIndex: number;
+  options?: string[];
+  correctIndex?: number;
+  correctAnswer?: string | boolean;
+  acceptedAnswers?: string[];
+  statements?: QuizTrueFalseStatement[];
   hint: string;
   explanation: string;
 }
 
 export interface QuizAnswerRecord {
-  selectedIndex: number;
+  selectedIndex?: number;
+  response?: string;
+  statementAnswers?: (boolean | null)[];
+  isSubmitted?: boolean;
   isCorrect: boolean;
   revealedHint: boolean;
   answeredAt: number;
@@ -48,7 +65,9 @@ export type ScratchpadTool =
   | 'eraser'
   | 'box-erase'
   | 'line'
+  | 'dashed-line'
   | 'arrow'
+  | 'image'
   | 'circle'
   | 'rect'
   | 'text';
@@ -67,6 +86,8 @@ export interface StrokeElement {
   start?: Point;
   end?: Point;
   text?: string;
+  imageData?: string;
+  questionId?: string;
 }
 
 export interface TimerState {

@@ -46,6 +46,7 @@ interface CameraState {
 const MAX_HISTORY = 30;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4.0;
+const IMAGE_CACHE = new Map<string, HTMLImageElement>();
 
 const INK_COLORS = [
   { id: 'ink-auto', label: 'Mực chuẩn (Đen/Trắng)', swatchLight: '#0F172A', swatchDark: '#F8FAFC' },
@@ -75,6 +76,7 @@ const TOOLS: { id: ScratchpadTool; label: string; icon: React.ReactNode }[] = [
   { id: 'eraser', label: 'Tẩy', icon: <Eraser className="w-4 h-4" /> },
   { id: 'box-erase', label: 'Xóa vùng', icon: <SquareDashedMousePointer className="w-4 h-4" /> },
   { id: 'line', label: 'Đường thẳng', icon: <Minus className="w-4 h-4" /> },
+  { id: 'dashed-line', label: 'Đường thẳng nét đứt', icon: <Minus className="w-4 h-4" strokeDasharray="3 2" /> },
   { id: 'arrow', label: 'Vector', icon: <ArrowUpRight className="w-4 h-4" /> },
   { id: 'circle', label: 'Hình tròn', icon: <Circle className="w-4 h-4" /> },
   { id: 'rect', label: 'Chữ nhật', icon: <Square className="w-4 h-4" /> },
@@ -300,7 +302,8 @@ function drawSmoothPath(
 function drawStrokeElement(
   ctx: CanvasRenderingContext2D,
   el: StrokeElement,
-  theme: ThemeMode
+  theme: ThemeMode,
+  onImageLoad?: () => void
 ) {
   ctx.save();
   ctx.lineCap = 'round';
@@ -334,13 +337,36 @@ function drawStrokeElement(
 
   ctx.lineWidth = el.width;
 
-  if (el.tool === 'pen' && el.points) {
+  if (el.tool === 'image' && el.imageData && el.start && el.end) {
+    let image = IMAGE_CACHE.get(el.imageData);
+    if (!image) {
+      image = new Image();
+      IMAGE_CACHE.set(el.imageData, image);
+      image.onload = onImageLoad ?? null;
+      image.src = el.imageData;
+    }
+    if (image.complete && image.naturalWidth > 0) {
+      ctx.drawImage(
+        image,
+        el.start.x,
+        el.start.y,
+        el.end.x - el.start.x,
+        el.end.y - el.start.y
+      );
+    }
+  } else if (el.tool === 'pen' && el.points) {
     drawSmoothPath(ctx, el.points, el.width);
-  } else if (el.tool === 'line' && el.start && el.end) {
+  } else if (
+    (el.tool === 'line' || el.tool === 'dashed-line') &&
+    el.start &&
+    el.end
+  ) {
     ctx.beginPath();
     ctx.moveTo(el.start.x, el.start.y);
     ctx.lineTo(el.end.x, el.end.y);
+    ctx.setLineDash(el.tool === 'dashed-line' ? [8, 6] : []);
     ctx.stroke();
+    ctx.setLineDash([]);
   } else if (el.tool === 'arrow' && el.start && el.end) {
     const dx = el.end.x - el.start.x;
     const dy = el.end.y - el.start.y;
@@ -509,11 +535,21 @@ function doesStrokeIntersectBox(el: StrokeElement, box: WorldBox): boolean {
     return false;
   }
 
-  if ((el.tool === 'line' || el.tool === 'arrow') && el.start && el.end) {
+  if (
+    (el.tool === 'line' ||
+      el.tool === 'dashed-line' ||
+      el.tool === 'arrow') &&
+    el.start &&
+    el.end
+  ) {
     return segmentIntersectsBox(el.start, el.end, box, pad);
   }
 
-  if ((el.tool === 'rect' || el.tool === 'circle') && el.start && el.end) {
+  if (
+    (el.tool === 'rect' || el.tool === 'circle' || el.tool === 'image') &&
+    el.start &&
+    el.end
+  ) {
     const sMinX = Math.min(el.start.x, el.end.x) - pad;
     const sMaxX = Math.max(el.start.x, el.end.x) + pad;
     const sMinY = Math.min(el.start.y, el.end.y) - pad;
@@ -568,9 +604,11 @@ export const SmartScratchpad: React.FC<SmartScratchpadProps> = ({
   const activePointersRef = useRef<Map<number, Point>>(new Map());
   const pinchStateRef = useRef<{ dist: number; mid: Point } | null>(null);
   const boxEraseRef = useRef<{ startWorld: Point; endWorld: Point } | null>(null);
+  const lastPointerWorldRef = useRef<Point | null>(null);
 
   const [zoomPercent, setZoomPercent] = useState(100);
   const [spacePanActive, setSpacePanActive] = useState(false);
+  const [imagePasteError, setImagePasteError] = useState<string | null>(null);
 
   const [tool, setTool] = useState<ScratchpadTool>('pen');
   const [color, setColor] = useState<string>('ink-auto');
@@ -686,20 +724,23 @@ export const SmartScratchpad: React.FC<SmartScratchpadProps> = ({
       ? normalizeBox(boxEraseRef.current.startWorld, boxEraseRef.current.endWorld)
       : null;
 
+    const renderAfterImageLoad = () => {
+      window.requestAnimationFrame(() => renderCanvas());
+    };
     for (const stroke of strokesRef.current) {
       const isMarkedForDelete =
         selectionBox !== null && doesStrokeIntersectBox(stroke, selectionBox);
       if (isMarkedForDelete) {
         inkCtx.save();
         inkCtx.globalAlpha = 0.25;
-        drawStrokeElement(inkCtx, stroke, theme);
+        drawStrokeElement(inkCtx, stroke, theme, renderAfterImageLoad);
         inkCtx.restore();
       } else {
-        drawStrokeElement(inkCtx, stroke, theme);
+        drawStrokeElement(inkCtx, stroke, theme, renderAfterImageLoad);
       }
     }
     if (activeStrokeRef.current) {
-      drawStrokeElement(inkCtx, activeStrokeRef.current, theme);
+      drawStrokeElement(inkCtx, activeStrokeRef.current, theme, renderAfterImageLoad);
     }
 
     // 2. Render infinite background + grid onto display canvas, then composite ink buffer
@@ -924,6 +965,106 @@ export const SmartScratchpad: React.FC<SmartScratchpadProps> = ({
     };
   };
 
+  const handlePasteImage = (e: React.ClipboardEvent<HTMLCanvasElement>) => {
+    const imageItem = Array.from(e.clipboardData.items).find(
+      (item) => item.kind === 'file' && item.type.startsWith('image/')
+    );
+    const file = imageItem?.getAsFile();
+    if (!file) return;
+
+    e.preventDefault();
+    setImagePasteError(null);
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setImagePasteError('Không thể đọc ảnh từ clipboard.');
+    };
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        setImagePasteError('Dữ liệu ảnh trong clipboard không hợp lệ.');
+        return;
+      }
+
+      const sourceImage = new Image();
+      sourceImage.onerror = () => {
+        setImagePasteError('Định dạng ảnh trong clipboard không được hỗ trợ.');
+      };
+      sourceImage.onload = () => {
+        try {
+          const resizeScale = Math.min(
+            1,
+            1600 / sourceImage.naturalWidth,
+            1600 / sourceImage.naturalHeight
+          );
+          const imageCanvas = document.createElement('canvas');
+          imageCanvas.width = Math.max(
+            1,
+            Math.round(sourceImage.naturalWidth * resizeScale)
+          );
+          imageCanvas.height = Math.max(
+            1,
+            Math.round(sourceImage.naturalHeight * resizeScale)
+          );
+          const imageContext = imageCanvas.getContext('2d');
+          if (!imageContext) {
+            setImagePasteError('Không thể xử lý ảnh để dán vào bảng nháp.');
+            return;
+          }
+          imageContext.drawImage(
+            sourceImage,
+            0,
+            0,
+            imageCanvas.width,
+            imageCanvas.height
+          );
+          const imageData = imageCanvas.toDataURL('image/webp', 0.85);
+          const storedImage = new Image();
+          storedImage.onerror = () => {
+            setImagePasteError('Không thể chuẩn bị ảnh để dán vào bảng nháp.');
+          };
+          storedImage.onload = () => {
+            IMAGE_CACHE.set(imageData, storedImage);
+            const displayScale = Math.min(
+              1,
+              480 / storedImage.naturalWidth,
+              360 / storedImage.naturalHeight
+            );
+            const width = Math.max(1, storedImage.naturalWidth * displayScale);
+            const height = Math.max(1, storedImage.naturalHeight * displayScale);
+            const canvas = canvasRef.current;
+            const rect = canvas?.getBoundingClientRect();
+            const center =
+              lastPointerWorldRef.current ??
+              screenToWorld({
+                x: (rect?.width ?? 0) / 2,
+                y: (rect?.height ?? 0) / 2,
+              });
+            const imageStroke: StrokeElement = {
+              id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              tool: 'image',
+              color,
+              width: 1,
+              start: {
+                x: center.x - width / 2,
+                y: center.y - height / 2,
+              },
+              end: {
+                x: center.x + width / 2,
+                y: center.y + height / 2,
+              },
+              imageData,
+            };
+            commitNewStrokes([...strokesRef.current, imageStroke]);
+          };
+          storedImage.src = imageData;
+        } catch {
+          setImagePasteError('Không thể xử lý ảnh để dán vào bảng nháp.');
+        }
+      };
+      sourceImage.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const commitTextDraft = () => {
     if (!textDraft) return;
     const trimmed = textDraft.value.trim();
@@ -943,6 +1084,7 @@ export const SmartScratchpad: React.FC<SmartScratchpadProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const screenPt = getScreenPoint(e);
+    lastPointerWorldRef.current = screenToWorld(screenPt);
     activePointersRef.current.set(e.pointerId, screenPt);
 
     // 2-finger touch gesture (pinch + pan)
@@ -1054,6 +1196,7 @@ export const SmartScratchpad: React.FC<SmartScratchpadProps> = ({
         panX: cameraRef.current.panX + dx,
         panY: cameraRef.current.panY + dy,
       };
+      lastPointerWorldRef.current = screenToWorld(screenPt);
       if (prev.dist > 5) {
         const factor = dist / prev.dist;
         zoomAtPoint(cameraRef.current.zoom * factor, mid.x, mid.y);
@@ -1066,6 +1209,7 @@ export const SmartScratchpad: React.FC<SmartScratchpadProps> = ({
 
     if (boxEraseRef.current) {
       boxEraseRef.current.endWorld = screenToWorld(screenPt);
+      lastPointerWorldRef.current = boxEraseRef.current.endWorld;
       scheduleRender();
       return;
     }
@@ -1079,12 +1223,14 @@ export const SmartScratchpad: React.FC<SmartScratchpadProps> = ({
         panX: cameraRef.current.panX + dx,
         panY: cameraRef.current.panY + dy,
       };
+      lastPointerWorldRef.current = screenToWorld(screenPt);
       scheduleRender();
       return;
     }
 
     if (!isDrawingRef.current || !activeStrokeRef.current) return;
     const worldPt = screenToWorld(screenPt);
+    lastPointerWorldRef.current = worldPt;
     const active = activeStrokeRef.current;
 
     if (active.points) {
@@ -1358,13 +1504,33 @@ export const SmartScratchpad: React.FC<SmartScratchpadProps> = ({
       <div ref={containerRef} className="relative flex-1 w-full overflow-hidden">
         <canvas
           ref={canvasRef}
+          tabIndex={0}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={finishPointer}
           onPointerCancel={finishPointer}
+          onPaste={handlePasteImage}
           onContextMenu={(e) => e.preventDefault()}
+          aria-label="Bảng nháp. Nhấp vào bảng rồi nhấn Ctrl+V hoặc Cmd+V để dán ảnh."
+          title="Nhấp vào bảng rồi nhấn Ctrl+V hoặc Cmd+V để dán ảnh."
           className={`w-full h-full block touch-none ${cursorClass}`}
         />
+        {imagePasteError && (
+          <div
+            role="alert"
+            className="absolute left-3 top-3 z-20 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-sm dark:border-red-800 dark:bg-red-950/80 dark:text-red-300"
+          >
+            <span>{imagePasteError}</span>
+            <button
+              type="button"
+              onClick={() => setImagePasteError(null)}
+              aria-label="Đóng thông báo"
+              className="font-bold"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Floating Infinite Canvas Navigation & Zoom HUD */}
         <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1 p-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 shadow-sm backdrop-blur-xs">

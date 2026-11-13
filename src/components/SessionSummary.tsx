@@ -75,7 +75,10 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
   const homeworkItems = sessionNotes.homeworkItems ?? [];
 
   const summaryData = useMemo(() => {
-    const attemptedList = quizQuestions.filter((q) => Boolean(quizAnswers[q.id]));
+    const attemptedList = quizQuestions.filter((q) => {
+      const answer = quizAnswers[q.id];
+      return Boolean(answer) && answer.isSubmitted !== false;
+    });
     const correctList = attemptedList.filter((q) => quizAnswers[q.id]?.isCorrect);
     const wrongList = attemptedList.filter((q) => !quizAnswers[q.id]?.isCorrect);
 

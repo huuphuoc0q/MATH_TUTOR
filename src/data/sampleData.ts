@@ -186,15 +186,48 @@ export const SAMPLE_QUIZ_QUESTIONS: QuizQuestion[] = [
 export const SAMPLE_QUIZ_JSON_TEMPLATE = JSON.stringify(
   [
     {
-      id: 'q_mau_1',
+      id: 'q_trac_nghiem_mau',
       topic: 'Giải tích',
       difficulty: 'Thông hiểu',
+      type: 'multiple-choice',
       question: 'Tính tích phân $I = \\int_0^1 x^2 \\, dx$',
       options: ['$\\frac{1}{3}$', '$\\frac{1}{2}$', '$1$', '$\\frac{2}{3}$'],
       correctIndex: 0,
       hint: 'Áp dụng công thức nguyên hàm $\\int x^n dx = \\frac{x^{n+1}}{n+1}$.',
       explanation:
         'Ta có $\\int_0^1 x^2 \\, dx = \\left[\\frac{x^3}{3}\\right]_0^1 = \\frac{1^3}{3} - 0 = \\frac{1}{3}$.',
+    },
+    {
+      id: 'q_dung_sai_mau',
+      topic: 'Lượng giác',
+      difficulty: 'Thông hiểu',
+      type: 'true-false',
+      question:
+        'Cho biết $\\cos\\alpha=-\\frac{4}{5}$ và $\\pi<\\alpha<\\frac{3\\pi}{2}$. Khi đó các mệnh đề sau đúng hay sai?',
+      statements: [
+        { text: '$\\sin\\alpha=-\\frac{3}{5}$.', correctAnswer: true },
+        { text: '$\\tan\\alpha=\\frac{3}{4}$.', correctAnswer: true },
+        { text: '$\\cos 2\\alpha=\\frac{7}{25}$.', correctAnswer: true },
+        {
+          text: '$\\sin\\left(\\alpha+\\frac{\\pi}{3}\\right)=\\frac{3-4\\sqrt{3}}{10}$.',
+          correctAnswer: false,
+        },
+      ],
+      hint: 'Vì $\\alpha$ thuộc góc phần tư III nên $\\sin\\alpha<0$. Dùng hệ thức $\\sin^2\\alpha+\\cos^2\\alpha=1$ và các công thức lượng giác.',
+      explanation:
+        'a) Đúng: $\\sin\\alpha=-\\frac{3}{5}$.\nb) Đúng: $\\tan\\alpha=\\frac{\\sin\\alpha}{\\cos\\alpha}=\\frac{3}{4}$.\nc) Đúng: $\\cos2\\alpha=\\cos^2\\alpha-\\sin^2\\alpha=\\frac{7}{25}$.\nd) Sai: $\\sin(\\alpha+\\frac{\\pi}{3})=-\\frac{3+4\\sqrt{3}}{10}$.',
+    },
+    {
+      id: 'q_tra_loi_ngan_mau',
+      topic: 'Giải tích',
+      difficulty: 'Thông hiểu',
+      type: 'short-answer',
+      question: 'Tính giá trị của $\\int_0^1 x^2 \\, dx$. Nhập kết quả ngắn gọn.',
+      correctAnswer: '1/3',
+      acceptedAnswers: ['0.3333'],
+      hint: 'Tìm nguyên hàm của $x^2$ rồi thay cận.',
+      explanation:
+        '$\\int_0^1 x^2 \\, dx = \\left[\\frac{x^3}{3}\\right]_0^1 = \\frac{1}{3}$.',
     },
   ],
   null,

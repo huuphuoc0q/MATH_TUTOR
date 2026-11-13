@@ -18,6 +18,7 @@ import { SAMPLE_QUIZ_JSON_TEMPLATE } from '../data/sampleData';
 import {
   QuizAnswerRecord,
   QuizQuestion,
+  QuizTrueFalseStatement,
   ScratchpadBackground,
   StrokeElement,
   ThemeMode,
@@ -40,6 +41,14 @@ interface QuizEngineProps {
 
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
+const getTrueFalseStatements = (
+  question: QuizQuestion
+): QuizTrueFalseStatement[] =>
+  question.statements ??
+  (typeof question.correctAnswer === 'boolean'
+    ? [{ text: question.question, correctAnswer: question.correctAnswer }]
+    : []);
+
 export const QuizEngine: React.FC<QuizEngineProps> = ({
   questions,
   onQuestionsChange,
@@ -56,6 +65,7 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
   const [rightPanelMode, setRightPanelMode] = useState<'solution' | 'scratchpad'>('solution');
   const [quickPadBg, setQuickPadBg] = useState<ScratchpadBackground>('grid');
   const [hintRevealedMap, setHintRevealedMap] = useState<Record<string, boolean>>({});
+  const [shortAnswerInputs, setShortAnswerInputs] = useState<Record<string, string>>({});
 
   // JSON Importer Modal states
   const [isImporterOpen, setIsImporterOpen] = useState(false);
@@ -67,13 +77,42 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
   const safeIndex = Math.min(Math.max(0, currentIndex), Math.max(0, questions.length - 1));
   const currentQuestion = questions[safeIndex];
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
+  const currentAnswerIsSubmitted =
+    Boolean(currentAnswer) && currentAnswer?.isSubmitted !== false;
+  const currentQuickStrokes = quickStrokes.filter(
+    (stroke) => !stroke.questionId || stroke.questionId === currentQuestion?.id
+  );
+  const handleQuickStrokesChange = (nextStrokes: StrokeElement[]) => {
+    if (!currentQuestion) {
+      onQuickStrokesChange(nextStrokes);
+      return;
+    }
+
+    const visibleIds = new Set(currentQuickStrokes.map((stroke) => stroke.id));
+    const originalStrokes = new Map(
+      quickStrokes.map((stroke) => [stroke.id, stroke])
+    );
+    const hiddenStrokes = quickStrokes.filter(
+      (stroke) => !visibleIds.has(stroke.id)
+    );
+    const scopedStrokes = nextStrokes.map((stroke) => {
+      const original = originalStrokes.get(stroke.id);
+      return original
+        ? { ...stroke, questionId: original.questionId }
+        : { ...stroke, questionId: currentQuestion.id };
+    });
+    onQuickStrokesChange([...hiddenStrokes, ...scopedStrokes]);
+  };
+  const currentTrueFalseStatements = currentQuestion
+    ? getTrueFalseStatements(currentQuestion)
+    : [];
 
   const stats = useMemo(() => {
     let attempted = 0;
     let correct = 0;
     for (const q of questions) {
       const rec = answers[q.id];
-      if (rec) {
+      if (rec && rec.isSubmitted !== false) {
         attempted += 1;
         if (rec.isCorrect) correct += 1;
       }
@@ -82,13 +121,20 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
   }, [questions, answers]);
 
   const handleSelectOption = (optionIdx: number) => {
-    if (!currentQuestion || currentAnswer) return;
+    if (!currentQuestion || currentAnswerIsSubmitted) return;
 
-    const isCorrect = optionIdx === currentQuestion.correctIndex;
+    const correctIndex =
+      currentQuestion.type === 'true-false'
+        ? currentQuestion.correctAnswer === true
+          ? 0
+          : 1
+        : currentQuestion.correctIndex;
+    const isCorrect = optionIdx === correctIndex;
     onAnswersChange({
       ...answers,
       [currentQuestion.id]: {
         selectedIndex: optionIdx,
+        isSubmitted: true,
         isCorrect,
         revealedHint: Boolean(hintRevealedMap[currentQuestion.id]),
         answeredAt: Date.now(),
@@ -98,16 +144,101 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
     setRightPanelMode('solution');
   };
 
+  const handleSubmitShortAnswer = () => {
+    if (!currentQuestion || currentAnswerIsSubmitted) return;
+    const response = shortAnswerInputs[currentQuestion.id] ?? '';
+    if (!response.trim()) return;
+
+    const acceptedAnswers = [
+      currentQuestion.correctAnswer,
+      ...(currentQuestion.acceptedAnswers ?? []),
+    ].filter((answer): answer is string => typeof answer === 'string');
+    const normalizeAnswer = (answer: string) =>
+      answer.trim().normalize('NFC').toLocaleLowerCase('vi-VN');
+    const normalizedResponse = normalizeAnswer(response);
+
+    onAnswersChange({
+      ...answers,
+      [currentQuestion.id]: {
+        response,
+        isSubmitted: true,
+        isCorrect: acceptedAnswers.some(
+          (answer) => normalizeAnswer(answer) === normalizedResponse
+        ),
+        revealedHint: Boolean(hintRevealedMap[currentQuestion.id]),
+        answeredAt: Date.now(),
+      },
+    });
+    setRightPanelMode('solution');
+  };
+
+  const handleSelectTrueFalseStatement = (
+    statementIndex: number,
+    response: boolean
+  ) => {
+    if (!currentQuestion || currentAnswerIsSubmitted) return;
+    const statementAnswers =
+      currentAnswer?.statementAnswers?.length === currentTrueFalseStatements.length
+        ? [...currentAnswer.statementAnswers]
+        : currentTrueFalseStatements.map(() => null);
+    statementAnswers[statementIndex] = response;
+    onAnswersChange({
+      ...answers,
+      [currentQuestion.id]: {
+        statementAnswers,
+        isSubmitted: false,
+        isCorrect: false,
+        revealedHint: Boolean(hintRevealedMap[currentQuestion.id]),
+        answeredAt: Date.now(),
+      },
+    });
+  };
+
+  const handleSubmitTrueFalse = () => {
+    if (!currentQuestion || currentAnswerIsSubmitted) return;
+    const statementAnswers = currentAnswer?.statementAnswers;
+    if (
+      !statementAnswers ||
+      statementAnswers.length !== currentTrueFalseStatements.length ||
+      statementAnswers.some((answer) => typeof answer !== 'boolean')
+    ) {
+      return;
+    }
+
+    const isCorrect = currentTrueFalseStatements.every(
+      (statement, index) =>
+        statementAnswers[index] === statement.correctAnswer
+    );
+    onAnswersChange({
+      ...answers,
+      [currentQuestion.id]: {
+        ...currentAnswer,
+        statementAnswers,
+        isSubmitted: true,
+        isCorrect,
+        revealedHint: Boolean(hintRevealedMap[currentQuestion.id]),
+        answeredAt: Date.now(),
+      },
+    });
+    setRightPanelMode('solution');
+  };
+
   const handleResetSingleQuestion = () => {
     if (!currentQuestion) return;
     const next = { ...answers };
     delete next[currentQuestion.id];
     onAnswersChange(next);
+    setShortAnswerInputs((prev) => {
+      const nextInputs = { ...prev };
+      delete nextInputs[currentQuestion.id];
+      return nextInputs;
+    });
   };
 
   const handleResetAllQuiz = () => {
     onAnswersChange({});
     setHintRevealedMap({});
+    setShortAnswerInputs({});
     onCurrentIndexChange(0);
   };
 
@@ -147,37 +278,100 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
     for (let i = 0; i < parsed.length; i++) {
       const item = parsed[i] as Record<string, unknown>;
       const num = i + 1;
-      if (!item || typeof item !== 'object') {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
         return { ok: false, error: `Câu hỏi #${num}: Không phải là đối tượng JSON hợp lệ.` };
       }
       if (typeof item.question !== 'string' || !item.question.trim()) {
         return { ok: false, error: `Câu hỏi #${num}: Thiếu trường "question" dạng chuỗi.` };
       }
-      if (!Array.isArray(item.options) || item.options.length < 2) {
-        return {
-          ok: false,
-          error: `Câu hỏi #${num}: Trường "options" phải là mảng có ít nhất 2 đáp án.`,
-        };
-      }
-      if (item.options.some((opt) => typeof opt !== 'string')) {
-        return {
-          ok: false,
-          error: `Câu hỏi #${num}: Tất cả đáp án trong "options" phải là chuỗi ký tự.`,
-        };
-      }
+
+      const type =
+        item.type === undefined ? 'multiple-choice' : item.type;
       if (
-        typeof item.correctIndex !== 'number' ||
-        !Number.isInteger(item.correctIndex) ||
-        item.correctIndex < 0 ||
-        item.correctIndex >= item.options.length
+        type !== 'multiple-choice' &&
+        type !== 'true-false' &&
+        type !== 'short-answer'
       ) {
         return {
           ok: false,
-          error: `Câu hỏi #${num}: "correctIndex" phải là số nguyên từ 0 đến ${item.options.length - 1}.`,
+          error: `Câu hỏi #${num}: "type" phải là "multiple-choice", "true-false" hoặc "short-answer".`,
         };
       }
 
-      validated.push({
+      if (type === 'multiple-choice') {
+        if (!Array.isArray(item.options) || item.options.length < 2) {
+          return {
+            ok: false,
+            error: `Câu hỏi #${num}: Trường "options" phải là mảng có ít nhất 2 đáp án.`,
+          };
+        }
+        if (item.options.some((opt) => typeof opt !== 'string' || !opt.trim())) {
+          return {
+            ok: false,
+            error: `Câu hỏi #${num}: Tất cả đáp án trong "options" phải là chuỗi không rỗng.`,
+          };
+        }
+        if (
+          typeof item.correctIndex !== 'number' ||
+          !Number.isInteger(item.correctIndex) ||
+          item.correctIndex < 0 ||
+          item.correctIndex >= item.options.length
+        ) {
+          return {
+            ok: false,
+            error: `Câu hỏi #${num}: "correctIndex" phải là số nguyên từ 0 đến ${item.options.length - 1}.`,
+          };
+        }
+      } else if (type === 'true-false') {
+        if (!Array.isArray(item.statements) || item.statements.length !== 4) {
+          return {
+            ok: false,
+            error: `Câu hỏi #${num}: Dạng đúng/sai cần đúng 4 mệnh đề trong "statements".`,
+          };
+        }
+        if (
+          item.statements.some((statement) => {
+            if (!statement || typeof statement !== 'object' || Array.isArray(statement)) {
+              return true;
+            }
+            const row = statement as Record<string, unknown>;
+            return (
+              typeof row.text !== 'string' ||
+              !row.text.trim() ||
+              typeof row.correctAnswer !== 'boolean'
+            );
+          })
+        ) {
+          return {
+            ok: false,
+            error: `Câu hỏi #${num}: Mỗi mệnh đề cần có "text" dạng chuỗi và "correctAnswer" là true hoặc false.`,
+          };
+        }
+      } else if (
+        type === 'short-answer' &&
+        (typeof item.correctAnswer !== 'string' || !item.correctAnswer.trim())
+      ) {
+        return {
+          ok: false,
+          error: `Câu hỏi #${num}: Dạng trả lời ngắn cần trường "correctAnswer" là chuỗi không rỗng.`,
+        };
+      }
+
+      if (
+        type === 'short-answer' &&
+        item.acceptedAnswers !== undefined &&
+        (!Array.isArray(item.acceptedAnswers) ||
+          item.acceptedAnswers.some(
+            (answer) => typeof answer !== 'string' || !answer.trim()
+          ))
+      ) {
+        return {
+          ok: false,
+          error: `Câu hỏi #${num}: "acceptedAnswers" phải là mảng các chuỗi không rỗng.`,
+        };
+      }
+
+      const question: QuizQuestion = {
         id:
           typeof item.id === 'string' && item.id.trim()
             ? item.id.trim()
@@ -187,15 +381,32 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
           typeof item.difficulty === 'string' && item.difficulty.trim()
             ? item.difficulty.trim()
             : 'Thông hiểu',
+        type,
         question: item.question.trim(),
-        options: (item.options as string[]).map((o) => o.trim()),
-        correctIndex: item.correctIndex,
         hint: typeof item.hint === 'string' ? item.hint.trim() : '',
         explanation:
           typeof item.explanation === 'string' && item.explanation.trim()
             ? item.explanation.trim()
             : 'Chưa có lời giải chi tiết cho câu hỏi này.',
-      });
+      };
+
+      if (type === 'multiple-choice') {
+        question.options = (item.options as string[]).map((option) => option.trim());
+        question.correctIndex = item.correctIndex as number;
+      } else if (type === 'true-false') {
+        question.statements = (item.statements as Record<string, unknown>[]).map(
+          (row) => ({
+            text: (row.text as string).trim(),
+            correctAnswer: row.correctAnswer as boolean,
+          })
+        );
+      } else {
+        question.correctAnswer = (item.correctAnswer as string).trim();
+        question.acceptedAnswers = Array.isArray(item.acceptedAnswers)
+          ? item.acceptedAnswers.map((answer) => (answer as string).trim())
+          : [];
+      }
+      validated.push(question);
     }
 
     return { ok: true, data: validated };
@@ -223,6 +434,7 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
     if (mode === 'replace') {
       onQuestionsChange(res.data);
       onAnswersChange({});
+      setShortAnswerInputs({});
       onCurrentIndexChange(0);
     } else {
       const existingIds = new Set(questions.map((q) => q.id));
@@ -250,6 +462,28 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
   const isHintVisible = currentQuestion
     ? Boolean(hintRevealedMap[currentQuestion.id])
     : false;
+  const currentQuestionType = currentQuestion?.type ?? 'multiple-choice';
+  const currentOptions =
+    currentQuestionType === 'true-false'
+      ? ['Đúng', 'Sai']
+      : currentQuestion?.options ?? [];
+  const correctOptionIndex =
+    currentQuestionType === 'true-false'
+      ? currentQuestion?.correctAnswer === true
+        ? 0
+        : 1
+      : currentQuestion?.correctIndex ?? -1;
+  const correctAnswerText =
+    currentQuestionType === 'short-answer'
+      ? String(currentQuestion?.correctAnswer ?? '')
+      : currentQuestionType === 'true-false'
+        ? 'các mệnh đề được đánh dấu trong bảng'
+        : OPTION_LETTERS[correctOptionIndex] ?? String(correctOptionIndex + 1);
+  const currentTrueFalseSelections = currentAnswer?.statementAnswers ?? [];
+  const canSubmitTrueFalse =
+    currentTrueFalseStatements.length > 0 &&
+    currentTrueFalseSelections.length === currentTrueFalseStatements.length &&
+    currentTrueFalseSelections.every((answer) => typeof answer === 'boolean');
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
@@ -260,6 +494,7 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
           {questions.map((q, idx) => {
             const rec = answers[q.id];
             const isCurrent = idx === safeIndex;
+            const isSubmitted = Boolean(rec && rec.isSubmitted !== false);
             return (
               <button
                 key={q.id}
@@ -268,14 +503,14 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
                 className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap shrink-0 tabular-nums ${
                   isCurrent
                     ? 'border-sky-600 bg-sky-600 text-white'
-                    : rec
+                    : isSubmitted
                       ? rec.isCorrect
                         ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
                         : 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300'
                       : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
-                {rec && !isCurrent && (
+                {isSubmitted && rec && !isCurrent && (
                   rec.isCorrect ? (
                     <Check className="w-3 h-3" />
                   ) : (
@@ -399,72 +634,190 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
               </div>
 
               {/* Answer Options */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {currentQuestion.options.map((optText, idx) => {
-                  const isAnswered = Boolean(currentAnswer);
-                  const isSelected = currentAnswer?.selectedIndex === idx;
-                  const isTrueOption = idx === currentQuestion.correctIndex;
-
-                  let cardStyle =
-                    'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 hover:border-sky-500 hover:bg-sky-50/50 dark:hover:bg-sky-950/30 text-slate-800 dark:text-slate-100';
-                  let stateTag: React.ReactNode = null;
-
-                  if (isAnswered) {
-                    if (isTrueOption) {
-                      cardStyle =
-                        'border-emerald-500 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100';
-                      stateTag = (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shrink-0">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Đúng</span>
-                        </span>
-                      );
-                    } else if (isSelected && !isTrueOption) {
-                      cardStyle =
-                        'border-red-500 dark:border-red-600 bg-red-50 dark:bg-red-950/40 text-red-950 dark:text-red-100';
-                      stateTag = (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 dark:text-red-400 shrink-0">
-                          <XCircle className="w-4 h-4" />
-                          <span>Sai</span>
-                        </span>
-                      );
-                    } else {
-                      cardStyle =
-                        'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 opacity-75';
-                    }
-                  }
-
-                  return (
+              {currentQuestionType === 'true-false' ? (
+                <div className="space-y-3">
+                  <div className="overflow-x-auto rounded-lg border border-slate-300 dark:border-slate-700">
+                    <table className="w-full min-w-[520px] border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-slate-100 dark:bg-slate-800">
+                          <th className="border-b border-r border-slate-300 dark:border-slate-700 px-3 py-2 text-left font-semibold">
+                            Mệnh đề
+                          </th>
+                          <th className="w-24 border-b border-r border-slate-300 dark:border-slate-700 px-2 py-2 text-center font-semibold">
+                            Đúng
+                          </th>
+                          <th className="w-24 border-b border-slate-300 dark:border-slate-700 px-2 py-2 text-center font-semibold">
+                            Sai
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentTrueFalseStatements.map((statement, idx) => (
+                          <tr
+                            key={idx}
+                            className="border-b last:border-b-0 border-slate-200 dark:border-slate-700"
+                          >
+                            <td className="border-r border-slate-200 dark:border-slate-700 px-3 py-3 leading-relaxed">
+                              <span className="mr-2 font-semibold">
+                                {String.fromCharCode(97 + idx)})
+                              </span>
+                              <MathText text={statement.text} />
+                            </td>
+                            {[true, false].map((choice) => {
+                              const selected =
+                                currentTrueFalseSelections[idx] === choice;
+                              const isCorrectChoice =
+                                statement.correctAnswer === choice;
+                              const choiceStyle = currentAnswerIsSubmitted
+                                ? isCorrectChoice
+                                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200'
+                                  : selected
+                                    ? 'border-red-500 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950/50 dark:text-red-200'
+                                    : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
+                                : selected
+                                  ? 'border-sky-500 bg-sky-50 text-sky-800 dark:border-sky-600 dark:bg-sky-950/50 dark:text-sky-200'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:border-sky-400 hover:bg-sky-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-sky-950/30';
+                              return (
+                                <td
+                                  key={String(choice)}
+                                  className="border-r last:border-r-0 border-slate-200 dark:border-slate-700 px-2 py-2 text-center"
+                                >
+                                  <button
+                                    type="button"
+                                    aria-label={`Mệnh đề ${String.fromCharCode(97 + idx)}: ${choice ? 'Đúng' : 'Sai'}`}
+                                    aria-pressed={selected}
+                                    disabled={currentAnswerIsSubmitted}
+                                    onClick={() =>
+                                      handleSelectTrueFalseStatement(idx, choice)
+                                    }
+                                    className={`w-full rounded-md border px-2 py-2 text-sm font-medium transition-colors disabled:cursor-default ${choiceStyle}`}
+                                  >
+                                    {choice ? 'Đúng' : 'Sai'}
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      Đã chọn {currentTrueFalseSelections.filter((answer) => typeof answer === 'boolean').length}/{currentTrueFalseStatements.length} mệnh đề
+                    </span>
                     <button
-                      key={idx}
                       type="button"
-                      disabled={isAnswered}
-                      onClick={() => handleSelectOption(idx)}
-                      className={`text-left p-4 rounded-xl border transition-colors flex items-start justify-between gap-3 ${cardStyle} ${
-                        isAnswered ? 'cursor-default' : 'cursor-pointer'
-                      }`}
+                      disabled={!canSubmitTrueFalse || currentAnswerIsSubmitted}
+                      onClick={handleSubmitTrueFalse}
+                      className="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-50 disabled:pointer-events-none text-white text-sm font-medium"
                     >
-                      <div className="flex items-start gap-3 min-w-0">
-                        <span
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
-                            isAnswered && isTrueOption
-                              ? 'bg-emerald-600 text-white'
-                              : isAnswered && isSelected
-                                ? 'bg-red-600 text-white'
-                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
-                          }`}
-                        >
-                          {OPTION_LETTERS[idx] ?? idx + 1}
-                        </span>
-                        <span className="text-base leading-relaxed break-words">
-                          <MathText text={optText} />
-                        </span>
-                      </div>
-                      {stateTag}
+                      {currentAnswerIsSubmitted ? 'Đã chấm' : 'Chấm câu'}
                     </button>
-                  );
-                })}
-              </div>
+                  </div>
+                </div>
+              ) : currentQuestionType === 'short-answer' ? (
+                <form
+                  className="flex flex-col sm:flex-row gap-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleSubmitShortAnswer();
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={
+                      currentAnswer?.response ??
+                      shortAnswerInputs[currentQuestion.id] ??
+                      ''
+                    }
+                    onChange={(event) =>
+                      setShortAnswerInputs((prev) => ({
+                        ...prev,
+                        [currentQuestion.id]: event.target.value,
+                      }))
+                    }
+                    disabled={currentAnswerIsSubmitted}
+                    aria-label="Câu trả lời ngắn"
+                    placeholder="Nhập câu trả lời..."
+                    className="min-w-0 flex-1 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-sky-500 disabled:opacity-70"
+                  />
+                  <button
+                    type="submit"
+                    disabled={currentAnswerIsSubmitted || !(shortAnswerInputs[currentQuestion.id] ?? '').trim()}
+                    className="px-5 py-3 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 disabled:pointer-events-none text-white text-sm font-medium"
+                  >
+                    Trả lời
+                  </button>
+                </form>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {currentOptions.map((optText, idx) => {
+                    const isAnswered = currentAnswerIsSubmitted;
+                    const isSelected = currentAnswer?.selectedIndex === idx;
+                    const isTrueOption = idx === correctOptionIndex;
+
+                    let cardStyle =
+                      'border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 hover:border-sky-500 hover:bg-sky-50/50 dark:hover:bg-sky-950/30 text-slate-800 dark:text-slate-100';
+                    let stateTag: React.ReactNode = null;
+
+                    if (isAnswered) {
+                      if (isTrueOption) {
+                        cardStyle =
+                          'border-emerald-500 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100';
+                        stateTag = (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shrink-0">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Đúng</span>
+                          </span>
+                        );
+                      } else if (isSelected && !isTrueOption) {
+                        cardStyle =
+                          'border-red-500 dark:border-red-600 bg-red-50 dark:bg-red-950/40 text-red-950 dark:text-red-100';
+                        stateTag = (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 dark:text-red-400 shrink-0">
+                            <XCircle className="w-4 h-4" />
+                            <span>Sai</span>
+                          </span>
+                        );
+                      } else {
+                        cardStyle =
+                          'border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 opacity-75';
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={isAnswered}
+                        onClick={() => handleSelectOption(idx)}
+                        className={`text-left p-4 rounded-xl border transition-colors flex items-start justify-between gap-3 ${cardStyle} ${
+                          isAnswered ? 'cursor-default' : 'cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <span
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
+                              isAnswered && isTrueOption
+                                ? 'bg-emerald-600 text-white'
+                                : isAnswered && isSelected
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            {OPTION_LETTERS[idx] ?? idx + 1}
+                          </span>
+                          <span className="text-base leading-relaxed break-words">
+                            <MathText text={optText} />
+                          </span>
+                        </div>
+                        {stateTag}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Prev / Next Footer */}
@@ -537,8 +890,9 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
             {rightPanelMode === 'scratchpad' ? (
               <div className="flex-1 min-h-0 overflow-hidden">
                 <SmartScratchpad
-                  strokes={quickStrokes}
-                  onStrokesChange={onQuickStrokesChange}
+                  key={currentQuestion?.id ?? 'no-question'}
+                  strokes={currentQuickStrokes}
+                  onStrokesChange={handleQuickStrokesChange}
                   background={quickPadBg}
                   onBackgroundChange={setQuickPadBg}
                   theme={theme}
@@ -562,7 +916,7 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
                 )}
 
                 {/* Solution Block when answered */}
-                {currentAnswer ? (
+                {currentAnswerIsSubmitted && currentAnswer ? (
                   <div className="space-y-4">
                     <div
                       className={`rounded-xl border p-4 flex items-center justify-between gap-3 ${
@@ -581,10 +935,7 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
                           <div className="font-display font-semibold text-sm">
                             {currentAnswer.isCorrect
                               ? 'Chính xác! Học sinh đã chọn đúng đáp án.'
-                              : `Chưa chính xác · Đáp án đúng là ${
-                                  OPTION_LETTERS[currentQuestion.correctIndex] ??
-                                  currentQuestion.correctIndex + 1
-                                }`}
+                              : `Chưa chính xác · Đáp án đúng là ${correctAnswerText}`}
                           </div>
                         </div>
                       </div>
@@ -645,10 +996,10 @@ export const QuizEngine: React.FC<QuizEngineProps> = ({
             <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 mb-4">
               <div>
                 <h3 className="font-display font-bold text-lg text-slate-900 dark:text-slate-100">
-                  Trình nhập câu hỏi trắc nghiệm (JSON)
+                  Trình nhập câu hỏi luyện tập (JSON)
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Dán dữ liệu JSON câu hỏi có chứa LaTeX ($...$, $$...$$). Hệ thống tự kiểm tra cú pháp trước khi nhập.
+                  Hỗ trợ trắc nghiệm, câu đúng/sai gồm 4 mệnh đề và trả lời ngắn. Dán mảng JSON có thể chứa LaTeX ($...$, $$...$$); hệ thống sẽ kiểm tra cú pháp trước khi nhập.
                 </p>
               </div>
               <button

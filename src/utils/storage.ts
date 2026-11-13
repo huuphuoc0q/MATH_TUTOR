@@ -24,7 +24,7 @@ export function createDefaultWorkspaceState(): WorkspaceState {
     knowledgeBase: SAMPLE_KNOWLEDGE_BASE.map((item) => ({ ...item })),
     quizQuestions: SAMPLE_QUIZ_QUESTIONS.map((q) => ({
       ...q,
-      options: [...q.options],
+      options: q.options ? [...q.options] : undefined,
     })),
     quizAnswers: {},
     currentQuestionIndex: 0,
