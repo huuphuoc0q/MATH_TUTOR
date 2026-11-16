@@ -16,6 +16,7 @@ interface SummaryPdfDocumentProps {
   quizAnswers: Record<string, QuizAnswerRecord>;
   sessionNotes: SessionNotesState;
   includeAllKnowledge?: boolean;
+  selectedKnowledgeItemIds?: string[] | null;
 }
 
 export const SummaryPdfDocument: React.FC<SummaryPdfDocumentProps> = ({
@@ -26,6 +27,7 @@ export const SummaryPdfDocument: React.FC<SummaryPdfDocumentProps> = ({
   quizAnswers,
   sessionNotes,
   includeAllKnowledge = false,
+  selectedKnowledgeItemIds = null,
 }) => {
   const today = new Date();
   const formattedDate = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(
@@ -45,12 +47,17 @@ export const SummaryPdfDocument: React.FC<SummaryPdfDocumentProps> = ({
       ? Math.round((correctList.length / attemptedList.length) * 100)
       : 0;
 
-  const reviewedOrMastered = knowledgeBase.filter(
+  const selectedKnowledge = knowledgeBase.filter(
+    (item) =>
+      selectedKnowledgeItemIds === null ||
+      selectedKnowledgeItemIds.includes(item.id)
+  );
+  const reviewedOrMastered = selectedKnowledge.filter(
     (k) => k.mastery === 'mastered' || k.mastery === 'review'
   );
   const displayedKnowledge =
     includeAllKnowledge || reviewedOrMastered.length === 0
-      ? knowledgeBase
+      ? selectedKnowledge
       : reviewedOrMastered;
 
   const homeworkItems: HomeworkItem[] = sessionNotes.homeworkItems ?? [];

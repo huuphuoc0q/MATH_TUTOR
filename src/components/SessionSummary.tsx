@@ -41,6 +41,8 @@ interface SessionSummaryProps {
   onNavigateToQuiz: (index: number) => void;
   includeAllKnowledgeInPdf: boolean;
   onIncludeAllKnowledgeInPdfChange: (val: boolean) => void;
+  selectedKnowledgeItemIds: string[] | null;
+  onSelectedKnowledgeItemIdsChange: (itemIds: string[] | null) => void;
 }
 
 export const SessionSummary: React.FC<SessionSummaryProps> = ({
@@ -57,9 +59,12 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
   onNavigateToQuiz,
   includeAllKnowledgeInPdf,
   onIncludeAllKnowledgeInPdfChange,
+  selectedKnowledgeItemIds,
+  onSelectedKnowledgeItemIdsChange,
 }) => {
   const [copied, setCopied] = useState(false);
   const [confirmNewSession, setConfirmNewSession] = useState(false);
+  const [knowledgeTopicFilter, setKnowledgeTopicFilter] = useState('');
 
   // Homework JSON Modal
   const [isHomeworkJsonOpen, setIsHomeworkJsonOpen] = useState(false);
@@ -73,6 +78,36 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
 
   const effectiveSeconds = Math.max(totalSessionSeconds, stopwatchSeconds);
   const homeworkItems = sessionNotes.homeworkItems ?? [];
+  const knowledgeTopics = useMemo(
+    () =>
+      Array.from(
+        new Set(knowledgeBase.map((item) => item.topic.trim()).filter(Boolean))
+      ),
+    [knowledgeBase]
+  );
+  const filteredKnowledgeItems = useMemo(
+    () =>
+      knowledgeTopicFilter
+        ? knowledgeBase.filter(
+            (item) => item.topic.trim() === knowledgeTopicFilter
+          )
+        : knowledgeBase,
+    [knowledgeBase, knowledgeTopicFilter]
+  );
+  const includedKnowledgeItemIds =
+    selectedKnowledgeItemIds ?? knowledgeBase.map((item) => item.id);
+  const hasSelectedKnowledgeItems = knowledgeBase.some((item) =>
+    includedKnowledgeItemIds.includes(item.id)
+  );
+  const includedKnowledgeItems = knowledgeBase.filter((item) =>
+    includedKnowledgeItemIds.includes(item.id)
+  );
+  const includedKnowledgeItemsLine =
+    includedKnowledgeItems.length > 0
+      ? includedKnowledgeItems
+          .map((item) => `${item.topic}: ${item.title}`)
+          .join(', ')
+      : 'Chưa chọn mục kiến thức';
 
   const summaryData = useMemo(() => {
     const attemptedList = quizQuestions.filter((q) => {
@@ -117,72 +152,60 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
 
   const generatedReport = useMemo(() => {
     const today = new Date().toLocaleDateString('vi-VN');
-    const student = sessionNotes.studentName.trim() || 'Học sinh';
-    const topicsLine =
-      summaryData.practicedTopics.length > 0
-        ? summaryData.practicedTopics.join(', ')
-        : 'Kiến thức trọng tâm theo giáo án';
-
-    const quizLine =
-      summaryData.attemptedCount > 0
-        ? `${summaryData.correctCount}/${summaryData.attemptedCount} câu đúng (đạt ${summaryData.accuracy}%)`
-        : 'Chưa thực hiện bài trắc nghiệm trên lớp';
-
-    const reviewItems: string[] = [];
-    summaryData.reviewKnowledge.forEach((k) => {
-      reviewItems.push(`- Công thức: ${k.title} (${k.topic})`);
-    });
-    summaryData.wrongList.forEach((q) => {
-      const idx = quizQuestions.findIndex((item) => item.id === q.id);
-      reviewItems.push(`- Dạng bài Câu ${idx + 1} (${q.topic} - ${q.difficulty})`);
-    });
-
-    const reviewBlock =
-      reviewItems.length > 0
-        ? reviewItems.join('\n')
-        : '- Không có nội dung tồn đọng; em đã nắm chắc các phần vừa luyện tập.';
-
-    const hwListBlock =
-      homeworkItems.length > 0
-        ? homeworkItems
-            .map(
-              (hw, idx) =>
-                `  + Bài ${idx + 1} (${hw.topic}): ${hw.title} — Hạn: ${hw.dueDate || 'Buổi tới'}`
-            )
-            .join('\n')
-        : '';
 
     return [
-      `BÁO CÁO TỔNG KẾT BUỔI HỌC (${today})`,
-      `Buổi học: ${lessonTitle}`,
-      `Học sinh: ${student}`,
-      `Thời lượng học: ${formattedDurationText}`,
+      `Gia sư xin phép gửi Phụ huynh/Học viên thông tin sau buổi học của phiên học ngày ${today} như sau:`,
       ``,
-      `1. KẾT QUẢ LUYỆN TẬP TRÊN LỚP`,
-      `- Chuyên đề đã ôn: ${topicsLine}`,
-      `- Trắc nghiệm tương tác: ${quizLine}`,
-      `- Công thức đã nắm vững: ${summaryData.masteredKnowledge.length} thẻ kiến thức`,
+      `Nội dung buổi học: ${lessonTitle}`,
+      `Mục kiến thức: ${includedKnowledgeItemsLine}`,
       ``,
-      `2. NỘI DUNG CẦN ÔN TẬP THÊM`,
-      reviewBlock,
-      ``,
-      `3. NHẬN XÉT CỦA GIÁO VIÊN`,
+      `Nhận xét về phiên học:`,
       sessionNotes.teacherComment.trim() || 'Em có thái độ học tập tích cực trong buổi học.',
-      ``,
-      `4. BÀI TẬP VỀ NHÀ`,
-      sessionNotes.homework.trim() || 'Hoàn thành bộ bài tập về nhà bên dưới.',
-      hwListBlock,
+      `Lưu ý, dặn dò cho phiên học tiếp theo:`,
+      sessionNotes.homework.trim(),
+      `Gia sư cảm ơn Phụ huynh/Học viên đã theo dõi và phối hợp.`,
     ]
       .filter(Boolean)
       .join('\n');
   }, [
     lessonTitle,
     sessionNotes,
-    summaryData,
-    formattedDurationText,
-    quizQuestions,
-    homeworkItems,
+    includedKnowledgeItemsLine,
   ]);
+
+  const toggleKnowledgeItem = (itemId: string) => {
+    const nextItemIds = new Set(
+      selectedKnowledgeItemIds ?? knowledgeBase.map((item) => item.id)
+    );
+    if (nextItemIds.has(itemId)) {
+      nextItemIds.delete(itemId);
+    } else {
+      nextItemIds.add(itemId);
+    }
+
+    onSelectedKnowledgeItemIdsChange(
+      knowledgeBase.every((item) => nextItemIds.has(item.id))
+        ? null
+        : knowledgeBase
+            .map((item) => item.id)
+            .filter((id) => nextItemIds.has(id))
+    );
+  };
+
+  const selectVisibleKnowledgeItems = () => {
+    const nextItemIds = new Set(
+      selectedKnowledgeItemIds ?? knowledgeBase.map((item) => item.id)
+    );
+    filteredKnowledgeItems.forEach((item) => nextItemIds.add(item.id));
+
+    onSelectedKnowledgeItemIdsChange(
+      knowledgeBase.every((item) => nextItemIds.has(item.id))
+        ? null
+        : knowledgeBase
+            .map((item) => item.id)
+            .filter((id) => nextItemIds.has(id))
+    );
+  };
 
   const handleCopyReport = async () => {
     try {
@@ -635,6 +658,84 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
               />
             </div>
 
+            <fieldset
+              aria-label="Mục kiến thức đưa vào tổng kết"
+              className="pt-1"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Mục kiến thức đưa vào tổng kết
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={selectVisibleKnowledgeItems}
+                    disabled={
+                      filteredKnowledgeItems.length === 0 ||
+                      filteredKnowledgeItems.every((item) =>
+                        includedKnowledgeItemIds.includes(item.id)
+                      )
+                    }
+                    className="text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline disabled:text-slate-400 disabled:no-underline"
+                  >
+                    Chọn tất cả mục đang hiển thị
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSelectedKnowledgeItemIdsChange([])}
+                    disabled={!hasSelectedKnowledgeItems}
+                    className="text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 hover:underline disabled:text-slate-400 disabled:no-underline"
+                  >
+                    Bỏ chọn tất cả
+                  </button>
+                </div>
+              </div>
+              {knowledgeBase.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Chưa có mục kiến thức trong kho.
+                </p>
+              ) : (
+                <>
+                  <label className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300 mb-2">
+                    <span>Lọc theo mảng kiến thức:</span>
+                    <select
+                      value={knowledgeTopicFilter}
+                      onChange={(e) => setKnowledgeTopicFilter(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500"
+                    >
+                      <option value="">Tất cả mảng</option>
+                      {knowledgeTopics.map((topic) => (
+                        <option key={topic} value={topic}>
+                          {topic}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="flex flex-col gap-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                    {filteredKnowledgeItems.map((item) => (
+                      <label
+                        key={item.id}
+                        className="inline-flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={includedKnowledgeItemIds.includes(item.id)}
+                          onChange={() => toggleKnowledgeItem(item.id)}
+                          className="mt-0.5 rounded border-slate-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500"
+                        />
+                        <span>
+                          <span className="font-medium">{item.title}</span>
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {' '}· {item.topic}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </fieldset>
+
             <div className="flex items-center justify-between pt-1">
               <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
                 <input
@@ -822,6 +923,7 @@ export const SessionSummary: React.FC<SessionSummaryProps> = ({
                 quizAnswers={quizAnswers}
                 sessionNotes={sessionNotes}
                 includeAllKnowledge={includeAllKnowledgeInPdf}
+                selectedKnowledgeItemIds={selectedKnowledgeItemIds}
               />
             </div>
           </div>

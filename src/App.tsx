@@ -17,6 +17,9 @@ export default function App() {
   const [state, setState] = useState<WorkspaceState>(() => loadWorkspaceState());
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
   const [includeAllKnowledgeInPdf, setIncludeAllKnowledgeInPdf] = useState(false);
+  const [summaryKnowledgeItemIds, setSummaryKnowledgeItemIds] = useState<
+    string[] | null
+  >(null);
 
   // Sync Tailwind .dark class on <html>
   useEffect(() => {
@@ -295,6 +298,8 @@ export default function App() {
               }
               includeAllKnowledgeInPdf={includeAllKnowledgeInPdf}
               onIncludeAllKnowledgeInPdfChange={setIncludeAllKnowledgeInPdf}
+              selectedKnowledgeItemIds={summaryKnowledgeItemIds}
+              onSelectedKnowledgeItemIdsChange={setSummaryKnowledgeItemIds}
             />
           )}
         </main>
@@ -318,6 +323,7 @@ export default function App() {
           quizAnswers={state.quizAnswers}
           sessionNotes={state.sessionNotes}
           includeAllKnowledge={includeAllKnowledgeInPdf}
+          selectedKnowledgeItemIds={summaryKnowledgeItemIds}
         />
       </div>
     </>

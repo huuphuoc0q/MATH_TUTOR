@@ -5,6 +5,7 @@ import {
   Check,
   CheckCircle2,
   ChevronLeft,
+  ChevronDown,
   ChevronRight,
   Copy,
   Edit3,
@@ -308,11 +309,58 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
-      {/* Control Header */}
-      <div className="shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 lg:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Segmented View Switcher */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-slate-800">
+      {/* Library Header and Controls */}
+      <div className="shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 lg:px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 px-3 py-2">
+              <BookOpen className="w-4 h-4 text-slate-400" />
+              <span className="text-xs text-slate-600 dark:text-slate-300 tabular-nums">
+                <strong className="text-slate-900 dark:text-slate-100">
+                  {items.length}
+                </strong>{' '}
+                công thức
+              </span>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-900/70 bg-emerald-50/70 dark:bg-emerald-950/30 px-3 py-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs text-emerald-800 dark:text-emerald-300 tabular-nums">
+                <strong>{masteredCount}</strong> nắm vững
+              </span>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 dark:border-amber-900/70 bg-amber-50/70 dark:bg-amber-950/30 px-3 py-2">
+              <RotateCcw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-xs text-amber-800 dark:text-amber-300 tabular-nums">
+                <strong>{reviewCount}</strong> cần ôn
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setJsonError('');
+                setIsJsonOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-medium transition-colors whitespace-nowrap"
+            >
+              <FileJson className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+              <span>Nhập JSON</span>
+            </button>
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors whitespace-nowrap shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Thêm kiến thức</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-col lg:flex-row lg:items-center gap-2.5">
+          <div className="flex w-fit items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-slate-800">
             <button
               type="button"
               onClick={() => setViewMode('list')}
@@ -323,7 +371,7 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Kho công thức</span>
+              <span>Danh sách</span>
             </button>
             <button
               type="button"
@@ -335,85 +383,63 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Chế độ Flashcard</span>
+              <span>Flashcard</span>
             </button>
           </div>
 
-          {/* Real-time Search */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm công thức, định lý, ghi chú..."
-              className="pl-9 pr-3 py-1.5 w-60 lg:w-72 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-sky-500"
-            />
+          <div className="flex flex-1 flex-col sm:flex-row gap-2.5">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tìm công thức, định lý, ghi chú..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+            <select
+              value={selectedLevel}
+              onChange={(e) => setSelectedLevel(e.target.value)}
+              aria-label="Lọc theo cấp độ"
+              className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500"
+            >
+              <option value="Tất cả">Mọi cấp độ</option>
+              {LEVEL_OPTIONS.map((lvl) => (
+                <option key={lvl} value={lvl}>
+                  {lvl}
+                </option>
+              ))}
+            </select>
           </div>
-
-          {/* Level Select */}
-          <select
-            value={selectedLevel}
-            onChange={(e) => setSelectedLevel(e.target.value)}
-            aria-label="Lọc theo cấp độ"
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500"
-          >
-            <option value="Tất cả">Mọi cấp độ</option>
-            {LEVEL_OPTIONS.map((lvl) => (
-              <option key={lvl} value={lvl}>
-                {lvl}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-2">
-          <span className="hidden xl:inline text-xs text-slate-500 dark:text-slate-400 tabular-nums mr-1">
-            {items.length} thẻ · {masteredCount} nắm vững · {reviewCount} cần ôn
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setJsonError('');
-              setIsJsonOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-medium transition-colors whitespace-nowrap"
-          >
-            <FileJson className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-            <span>Nhập JSON</span>
-          </button>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-medium transition-colors whitespace-nowrap shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm kiến thức</span>
-          </button>
         </div>
       </div>
 
       {/* Topic Filter Strip */}
-      <div className="shrink-0 px-4 lg:px-6 py-2.5 border-b border-slate-200/70 dark:border-slate-800/70 bg-slate-50/80 dark:bg-slate-950 flex items-center justify-between gap-3 overflow-x-auto">
-        <div className="flex items-center gap-1.5">
-          {topics.map((topic) => {
-            const active = selectedTopic === topic;
-            return (
-              <button
-                key={topic}
-                type="button"
-                onClick={() => setSelectedTopic(topic)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                  active
-                    ? 'bg-sky-600 text-white'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800'
-                }`}
-              >
-                {topic}
-              </button>
-            );
-          })}
+      <div className="shrink-0 px-4 lg:px-6 py-3 border-b border-slate-200/70 dark:border-slate-800/70 bg-slate-50/80 dark:bg-slate-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 overflow-x-auto">
+        <div className="flex items-center gap-3">
+          <span className="hidden md:block shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            Chuyên đề
+          </span>
+          <div className="flex items-center gap-1.5">
+            {topics.map((topic) => {
+              const active = selectedTopic === topic;
+              return (
+                <button
+                  key={topic}
+                  type="button"
+                  onClick={() => setSelectedTopic(topic)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                    active
+                      ? 'bg-sky-600 text-white'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {topic}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {viewMode === 'flashcard' && (
@@ -451,108 +477,111 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({
               </button>
             </div>
           ) : (
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="max-w-6xl mx-auto flex flex-col gap-3">
               {filteredItems.map((item) => {
                 const masteryMeta = getMasteryLabel(item.mastery);
                 return (
                   <article
                     key={item.id}
-                    className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 flex flex-col justify-between gap-4"
+                    className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 sm:px-5 shadow-sm transition-colors hover:border-sky-200 dark:hover:border-sky-900"
                   >
-                    <div>
-                      {/* Quiet Unboxed Metadata Header */}
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                          <span className="font-medium text-sky-700 dark:text-sky-400">
-                            {item.topic}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span>{item.level}</span>
-                          <span aria-hidden="true">·</span>
-                          <span className={`font-medium ${masteryMeta.className}`}>
-                            {masteryMeta.text}
-                          </span>
+                    <div className="flex items-center gap-2 py-3">
+                      <details className="group min-w-0 flex-1">
+                        <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                              <span className="rounded-full bg-sky-50 dark:bg-sky-950/50 px-2.5 py-1 font-semibold text-sky-700 dark:text-sky-300">
+                                {item.topic}
+                              </span>
+                              <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1 font-medium text-slate-600 dark:text-slate-300">
+                                {item.level}
+                              </span>
+                              <span className={`px-1.5 py-1 font-medium ${masteryMeta.className}`}>
+                                {masteryMeta.text}
+                              </span>
+                            </div>
+                            <h3 className="font-display font-semibold text-sm sm:text-base text-slate-900 dark:text-slate-100">
+                              {item.title}
+                            </h3>
+                          </div>
+                          <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open:rotate-180" />
+                        </summary>
+
+                        <div className="border-t border-slate-100 dark:border-slate-800 mt-3 pt-4 pb-1">
+                          <div className="min-h-16 flex items-center rounded-lg bg-sky-50/70 dark:bg-slate-800/70 border border-sky-100 dark:border-slate-700 p-3.5 text-sm lg:text-[15px] text-slate-800 dark:text-slate-100 mb-3">
+                            <MathText text={item.formula} />
+                          </div>
+
+                          {item.example && (
+                            <div className="text-sm text-slate-600 dark:text-slate-300 mb-2">
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                Ví dụ:{' '}
+                              </span>
+                              <MathText text={item.example} />
+                            </div>
+                          )}
+
+                          {item.notes && (
+                            <div className="text-sm text-slate-600 dark:text-slate-300 pt-2 border-t border-slate-100 dark:border-slate-800">
+                              <span className="font-semibold text-sky-700 dark:text-sky-400">
+                                Mẹo giảng dạy:{' '}
+                              </span>
+                              <MathText text={item.notes} />
+                            </div>
+                          )}
+
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              Trạng thái ghi nhớ:
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleSetMastery(item.id, 'review')}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                                  item.mastery === 'review'
+                                    ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300'
+                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span>Cần ôn lại</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSetMastery(item.id, 'mastered')}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                                  item.mastery === 'mastered'
+                                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'
+                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Đã nắm vững</span>
+                              </button>
+                            </div>
+                          </div>
                         </div>
+                      </details>
 
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(item)}
-                            title="Sửa kiến thức"
-                            aria-label="Sửa kiến thức"
-                            className="p-1.5 rounded-md text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteItem(item.id)}
-                            title="Xóa kiến thức"
-                            aria-label="Xóa kiến thức"
-                            className="p-1.5 rounded-md text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <h3 className="font-display font-semibold text-base lg:text-lg text-slate-900 dark:text-slate-100 mb-3">
-                        {item.title}
-                      </h3>
-
-                      {/* Formula Box */}
-                      <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 p-3.5 text-sm lg:text-[15px] text-slate-800 dark:text-slate-100 mb-3">
-                        <MathText text={item.formula} />
-                      </div>
-
-                      {item.example && (
-                        <div className="text-sm text-slate-600 dark:text-slate-300 mb-2">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            Ví dụ:{' '}
-                          </span>
-                          <MathText text={item.example} />
-                        </div>
-                      )}
-
-                      {item.notes && (
-                        <div className="text-sm text-slate-600 dark:text-slate-300 pt-2 border-t border-slate-100 dark:border-slate-800">
-                          <span className="font-semibold text-sky-700 dark:text-sky-400">
-                            Mẹo giảng dạy:{' '}
-                          </span>
-                          <MathText text={item.notes} />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quick Mastery Toggle Footer */}
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                      <span className="text-xs text-slate-500 dark:text-slate-400">
-                        Trạng thái ghi nhớ:
-                      </span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex shrink-0 items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => handleSetMastery(item.id, 'review')}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                            item.mastery === 'review'
-                              ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300'
-                              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                          }`}
+                          onClick={() => openEditModal(item)}
+                          title="Sửa kiến thức"
+                          aria-label="Sửa kiến thức"
+                          className="p-1.5 rounded-md text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                         >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>Cần ôn lại</span>
+                          <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSetMastery(item.id, 'mastered')}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                            item.mastery === 'mastered'
-                              ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300'
-                              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                          }`}
+                          onClick={() => handleDeleteItem(item.id)}
+                          title="Xóa kiến thức"
+                          aria-label="Xóa kiến thức"
+                          className="p-1.5 rounded-md text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Đã nắm vững</span>
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
